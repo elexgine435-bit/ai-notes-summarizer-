@@ -1,18 +1,74 @@
 """AI Notes Summarizer: single-file Streamlit app (all code in one file)."""
 
+import importlib
 import json
 import os
 import re
+import subprocess
+import sys
 
 import streamlit as st
-from groq import (
+
+
+# ---------------------------------------------------------------------------
+# Safety net: if Streamlit Cloud did not install the packages from
+# requirements.txt, try to install them here. If that fails too, show a clear
+# message on the screen instead of a confusing crash.
+# ---------------------------------------------------------------------------
+def _ensure_package(import_name, pip_name):
+    try:
+        importlib.import_module(import_name)
+        return True
+    except ImportError:
+        pass
+
+    commands = [
+        [sys.executable, "-m", "pip", "install", "--quiet", pip_name],
+        ["uv", "pip", "install", "--quiet", "--python", sys.executable, pip_name],
+    ]
+    for command in commands:
+        try:
+            subprocess.check_call(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=300,
+            )
+            importlib.invalidate_caches()
+            importlib.import_module(import_name)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+_MISSING_PACKAGES = [
+    pip_name
+    for import_name, pip_name in (("groq", "groq"), ("pypdf", "pypdf"))
+    if not _ensure_package(import_name, pip_name)
+]
+
+if _MISSING_PACKAGES:
+    st.set_page_config(page_title="AI Notes Summarizer", page_icon="🎓")
+    st.error(
+        "❌ These packages are not installed: **" + ", ".join(_MISSING_PACKAGES) + "**"
+    )
+    st.markdown(
+        "**How to fix:** in your GitHub repository, next to `app.py`, there must be a file "
+        "named exactly `requirements.txt` containing these 3 lines:\n\n"
+        "```\nstreamlit>=1.40.0\npypdf>=5.0.0\ngroq>=0.30.0\n```\n"
+        "Then open **Manage app → ⋮ → Reboot app**."
+    )
+    st.stop()
+
+from groq import (  # noqa: E402
     APIConnectionError,
     APIStatusError,
     AuthenticationError,
     Groq,
     RateLimitError,
 )
-from pypdf import PdfReader
+from pypdf import PdfReader  # noqa: E402
 
 # ===========================================================================
 # PART 1: PDF READING
